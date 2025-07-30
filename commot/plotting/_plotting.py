@@ -789,6 +789,6 @@ def plot_cluster_communication_dotplot(
         label.set_rotation(90)
     # for artist in g.legend.legendHandles:
     #     artist.set_edgecolor(".7")
-    plt.savefig(filename, dpi=500, bbox_inches = 'tight')
+    # plt.savefig(filename, dpi=500, bbox_inches = 'tight')
 
     return
