@@ -779,7 +779,7 @@ def plot_cluster_communication_dotplot(
     g = sns.relplot(
         data=df_plot,
         x="x", y="y", hue="color_col", size="size_col",
-        palette=cmap, hue_norm=(vmin, vmax), edgecolor=".7", legend=False,
+        palette=cmap, hue_norm=(vmin, vmax), edgecolor=".7", legend='auto',
         height=10, sizes=(size_min, size_max), size_norm=pvalueNormalize(vmin=p_value_vmin, vmax=p_value_cutoff),
     )
     g.set(xlabel="", ylabel="", aspect="equal")
@@ -790,5 +790,6 @@ def plot_cluster_communication_dotplot(
     # for artist in g.legend.legendHandles:
     #     artist.set_edgecolor(".7")
     # plt.savefig(filename, dpi=500, bbox_inches = 'tight')
-
-    return
+    
+    # To avoid print(g) is None
+    return g
