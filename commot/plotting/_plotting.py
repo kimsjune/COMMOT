@@ -774,16 +774,17 @@ def plot_cluster_communication_dotplot(
             if P[i,j] <= p_value_cutoff:
                 data_plot.append([x_names[i], y_names[j], S[i,j], max(P[i,j], p_value_vmin)])
     df_plot = pd.DataFrame(data=data_plot, columns=['x','y','color_col','size_col'])
-        
+
+    df_plot['color_col'] = pd.to_numeric(df_plot['color_col'], errors='coerce')    
     sns.set_theme(style="whitegrid", font_scale=font_scale)
     g = sns.relplot(
         data=df_plot,
         x="x", y="y", hue="color_col", size="size_col",
-        palette=cmap, hue_norm=(vmin, vmax), edgecolor=".7", legend='auto',
+        palette=cmap, hue_norm=(vmin, vmax), edgecolor=".7", legend='full',
         height=10, sizes=(size_min, size_max), size_norm=pvalueNormalize(vmin=p_value_vmin, vmax=p_value_cutoff),
     )
     g.set(xlabel="", ylabel="", aspect="equal")
-    #g.despine(left=True, bottom=True)
+    g.despine(left=True, bottom=True)
     g.ax.margins(.02)
     for label in g.ax.get_xticklabels():
         label.set_rotation(90)
