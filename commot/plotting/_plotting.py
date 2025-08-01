@@ -780,7 +780,7 @@ def plot_cluster_communication_dotplot(
     g = sns.relplot(
         data=df_plot,
         x="x", y="y", hue="color_col", size="size_col",
-        palette=cmap, hue_norm=(vmin, vmax), edgecolor=".7", legend='full',
+        palette=cmap, hue_norm=(vmin, vmax), edgecolor=".7", legend='full', edgecolor="black", linewidth=0.5,
         height=10, sizes=(size_min, size_max), size_norm=pvalueNormalize(vmin=p_value_vmin, vmax=p_value_cutoff),
     )
     g.set(xlabel="", ylabel="", aspect="equal")
