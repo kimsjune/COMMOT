@@ -243,8 +243,8 @@ def communication_deg_detection(
     import rpy2
     import anndata2ri
     import rpy2.robjects as ro
+    from rpy2.robjects import default_converter, pandas2ri, numpy2ri
     from rpy2.robjects.conversion import localconverter
-    from rpy2.robjects import globalenv
     import rpy2.rinterface_lib.callbacks
     import logging
     import numpy as np
@@ -290,16 +290,15 @@ def communication_deg_detection(
             comm_sum = adata.obsm[summary_name][summary_abrv+'-'+lr_pair[0]+'-'+lr_pair[1]].values.reshape(-1,1)
         cell_weight = np.ones_like(comm_sum).reshape(-1,1)
 
-        # === Send Python objects to R ===
-        with anndata2ri.converter.context() as ac, \
-            ro.numpy2ri.converter.context() as nc, \
-            ro.pandas2ri.converter.context() as pc:
-                globalenv['adata'] = adata_deg
-                globalenv['pseudoTime'] = comm_sum
-                globalenv['cellWeight'] = cell_weight
-
-        # === Prepare data in R ===
-        ro.r('X <- as.matrix(assay(adata, "X"))')
+        # send adata to R
+        adata_r = anndata2ri.py2rpy(adata_deg)
+        with localconverter(anndata2ri.converter):
+            ro.r.assign("adata", adata_r)
+        ro.r("X <- as.matrix( assay( adata, 'X') )")
+        with localconverter(numpy2ri.converter):
+            ro.r.assign("pseudoTime", comm_sum)
+        with localconverter(numpy2ri.converter):
+            ro.r.assign("cellWeight", cell_weight)
 
         # perform analysis (tradeSeq-1.0.1 in R-3.6.3)
         string_fitGAM = f'sce <- fitGAM(counts=X, pseudotime=pseudoTime[,1], cellWeights=cellWeight[,1], nknots={nknots}, verbose=TRUE)'
