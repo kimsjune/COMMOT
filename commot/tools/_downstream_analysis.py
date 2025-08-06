@@ -256,7 +256,9 @@ def communication_deg_detection(
     ro.r('library(clusterExperiment)')
 
     # Use conversion context instead of deprecated activate()
-    with anndata2ri.converter + ro.numpy2ri.converter + ro.pandas2ri.converter:
+    with anndata2ri.converter.context() as ac, \
+         ro.numpy2ri.converter.context() as nc, \
+         ro.pandas2ri.converter.context() as pc:
         # prepare input adata for R
         adata_deg = anndata.AnnData(
             X = adata.layers['counts'],
