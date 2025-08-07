@@ -794,3 +794,186 @@ def plot_cluster_communication_dotplot(
     
     # To avoid print(g) is None
     return g
+
+# New function to plot the output of tl.cluster_communication_spatial_permutation()
+def plot_cluster_communication_permutation_dotplot(
+    adata: anndata.AnnData,
+    database_name: str = None,
+    pathway_name: str = None,
+    clustering: str = None,
+    keys = None,
+    p_value_cutoff: float = 0.05,
+    p_value_vmin: float = 1e-3,
+    size_max = 20,
+    size_min = 10,
+    vmax_quantile = 0.99,
+    vmin_quantile = 0.0,
+    cmap = 'cool',
+    filename = None,
+    font_scale = 0.5,
+    top_nclus = -1,
+    top_ncomm = -1,
+    cluster_x = False,
+    cluster_y = False,
+    cluster_knn = 5,
+    cluster_res = 1.0
+):
+    """
+    Plot cluster-cluster communication through multiple ligand-receptor pairs as dotplot.
+
+    .. image:: cluster_communication_dotplot.png
+        :width: 300pt
+
+    Parameters
+    ----------
+    adata
+        The data matrix of shape ``n_obs`` × ``n_var`` after running ``tl.spatial_communication``.
+        Rows correspond to cells or positions and columns to genes.
+    database_name
+        The name of the LR database.
+    pathway_name
+        Name of the a signaling pathway or a list of several signaling pathways. 
+        If given, all LR pairs of this signaling pathway(s) will be plotted.
+        If ``keys`` is specified, ``pathway_name`` will be ignored.
+    clustering
+        Name of the clustering.        
+    keys
+        A list of keys for example 'ligA-recA' for a LR pair or 'pathwayX' for a signaling pathway 'pathwayX'. 
+        If given, ``pathway_name`` will be ignored.
+    p_value_cutoff
+        Cutoff for being considered significant.
+    p_value_vmin
+        The lower bound of p-value corresponding to the biggest dot size.
+    size_max
+        Size of biggest dot (corresponding to p-value <= p_value_min).
+    size_min
+        Size of smallest dot (corresponding to p-value = p_value_cutoff).
+    vmax_quantile
+        The quantile of cluster-cluster communication weights for setting vmax of colormap.
+    vmin_quantile
+        The quantile of cluster-cluster communication weights for setting vmin of colormap.
+    cmap
+        The colormap for the nodes.
+    filename
+        Filename for saving the figure. Set the name to end with '.pdf' or 'png'
+        to specify format.
+    font_scale
+        Font size.
+    top_nclus
+        If not -1, the top number of cluster-cluster pairs with the highest total communication
+        weight among the signaling pathways are plotted.
+    top_ncomm
+        If not -1, the top number of ligand-recepter pairs with the highest total communication
+        weight among the cluster-cluster pairs are plotted.
+    cluster_x
+        Whether to reorder the cluster-cluster pairs according to their patterns among
+        the ligand-receptor pairs.
+    cluster_y
+        Whether to reorder the ligand-receptor pairs according to their patterns among
+        the cluster-cluster pairs.
+    cluster_knn
+        The k value of knn graph for clustering if cluster_x or cluster_y is True.
+    cluster_res
+        The resolution of leiden clustering algorithm if cluster_x or cluster_y is True.
+
+    """
+    if keys is None:
+        keys = []
+        if isinstance(pathway_name, str):
+            pathways = [pathway_name]
+        elif isinstance(pathway_name, list):
+            pathways = pathway_name
+        df_ligrec = adata.uns['commot-%s-info' % database_name]['df_ligrec']
+        for i in range(df_ligrec.shape[0]):
+            if df_ligrec.iloc[i][2] in pathways:
+                keys.append(df_ligrec.iloc[i][0]+'-'+df_ligrec.iloc[i][1])
+        keys.extend( pathways )
+    
+    X_tmp = adata.uns['commot_cluster_spatial_permutation-'+clustering+'-'+database_name+'-'+keys[0]]['communication_matrix'].copy()
+    labels = list( X_tmp.columns.values )
+    name_matrix = np.empty([len(labels), len(labels)], object)
+    for i in range(len(labels)):
+        for j in range(len(labels)):
+            name_matrix[i,j] = labels[i]+'->'+labels[j]
+    x_names = name_matrix.flatten()
+
+    y_names = []
+    S = np.empty([len(x_names), len(keys)], float)
+    P = np.empty([len(x_names), len(keys)], float)
+    for ikey in range(len(keys)):
+        key = keys[ikey]
+        y_names.append(key)
+        S_tmp = adata.uns['commot_cluster_spatial_permutation-%s-%s-%s' % (clustering, database_name, key)]['communication_matrix'].values.copy()
+        P_tmp = adata.uns['commot_cluster_spatial_permutation-%s-%s-%s' % (clustering, database_name, key)]['communication_pvalue'].values.copy()
+        S[:,ikey] = S_tmp.flatten()[:]
+        P[:,ikey] = P_tmp.flatten()[:]
+    y_names = np.array( y_names, str )
+
+    P_mask = P <= p_value_cutoff
+    P_mask_row = P_mask.sum(axis=1).astype(bool)
+    P_mask_col = P_mask.sum(axis=0).astype(bool)
+
+    P = P[P_mask_row,:][:,P_mask_col]
+    S = S[P_mask_row,:][:,P_mask_col]
+    x_names = x_names[P_mask_row]
+    y_names = y_names[P_mask_col]
+
+    if top_nclus > 0:
+        tmp_idx = np.argsort(-S.sum(axis=1))[:top_nclus]
+        P = P[tmp_idx,:]; S = S[tmp_idx,:]; x_names = x_names[tmp_idx]
+    if top_ncomm > 0:
+        tmp_idx = np.argsort(-S.sum(axis=0))[:top_ncomm]
+        P = P[:,tmp_idx]; S = S[:,tmp_idx]; y_names = y_names[tmp_idx]
+
+    if cluster_x:
+        mat = S
+        dummy_cmap = ['r']
+        if mat.shape[1] > 10:
+            mat_pca = PCA(n_components=np.min([10,mat.shape[1],mat.shape[0]]), svd_solver='full').fit_transform(mat)
+        else:
+            mat_pca = mat
+        D = distance_matrix(mat_pca, mat_pca)
+        labels = leiden_clustering(D, k=cluster_knn, resolution=cluster_res)
+        x_idx, _ = reorder(labels, -np.abs(mat.sum(axis=1)), -np.abs(mat.sum(axis=1)), dummy_cmap)
+        P = P[x_idx,:]; S = S[x_idx,:]; x_names = x_names[x_idx]
+    if cluster_y:
+        mat = S
+        dummy_cmap = ['r']
+        if mat.shape[0] > 10:
+            mat_pca = PCA(n_components=np.min([10,mat.shape[1],mat.shape[0]]), svd_solver='full').fit_transform(mat.T)
+        else:
+            mat_pca = mat.T
+        D = distance_matrix(mat_pca, mat_pca)
+        labels = leiden_clustering(D, k=cluster_knn, resolution=cluster_res)
+        y_idx, _ = reorder(labels, -np.abs(mat.sum(axis=0)), -np.abs(mat.sum(axis=0)), dummy_cmap)
+        P = P[:,y_idx]; S = S[:,y_idx]; y_names = y_names[y_idx]
+        
+    vmax = np.quantile(S, vmax_quantile)
+    vmin = np.quantile(S, vmin_quantile)
+
+    data_plot = []
+    for i in range(P.shape[0]):
+        for j in range(P.shape[1]):
+            if P[i,j] <= p_value_cutoff:
+                data_plot.append([x_names[i], y_names[j], S[i,j], max(P[i,j], p_value_vmin)])
+    df_plot = pd.DataFrame(data=data_plot, columns=['x','y','color_col','size_col'])
+
+    df_plot['color_col'] = pd.to_numeric(df_plot['color_col'], errors='coerce')    
+    sns.set_theme(style="whitegrid", font_scale=font_scale)
+    g = sns.relplot(
+        data=df_plot,
+        x="x", y="y", hue="color_col", size="size_col",
+        palette=cmap, hue_norm=(vmin, vmax), legend='full', edgecolor="black", linewidth=0.5,
+        height=10, sizes=(size_min, size_max), size_norm=pvalueNormalize(vmin=p_value_vmin, vmax=p_value_cutoff),
+    )
+    g.set(xlabel="", ylabel="", aspect="equal")
+    g.despine(left=True, bottom=True)
+    g.ax.margins(.02)
+    for label in g.ax.get_xticklabels():
+        label.set_rotation(90)
+    # for artist in g.legend.legendHandles:
+    #     artist.set_edgecolor(".7")
+    # plt.savefig(filename, dpi=500, bbox_inches = 'tight')
+    
+    # To avoid print(g) is None
+    return g
